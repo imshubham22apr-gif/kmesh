@@ -246,6 +246,37 @@ func TestShouldEnroll(t *testing.T) {
 			},
 			want: false,
 		},
+		{
+			name: "pod with bypass label should not be managed",
+			args: args{
+				namespace: &corev1.Namespace{
+					TypeMeta: metav1.TypeMeta{
+						Kind:       "Namespace",
+						APIVersion: "v1",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "ut-test",
+						Labels: map[string]string{
+							constants.DataPlaneModeLabel: constants.DataPlaneModeKmesh,
+						},
+					},
+				},
+				pod: &corev1.Pod{
+					TypeMeta: metav1.TypeMeta{
+						Kind:       "Pod",
+						APIVersion: "v1",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "ut-test",
+						Name:      "ut-pod",
+						Labels: map[string]string{
+							"kmesh.net/bypass": "enabled",
+						},
+					},
+				},
+			},
+			want: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -274,3 +274,73 @@ func setNamespaceLabel(t framework.TestContext, ns string, key string, value str
 
 	return nil
 }
+
+// TestByPass tests whether the bypass function is effective. When a pod is labeled with
+// `kmesh.net/bypass=enabled`, it will be removed from the mesh and traffic will not pass
+// through the mesh service (e.g., waypoint).
+func TestByPass(t *testing.T) {
+	framework.NewTest(t).Run(func(t framework.TestContext) {
+		dst := apps.ServiceWithWaypointAtServiceGranularity
+		src := apps.EnrolledToKmesh
+		t.NewSubTest("before workloads add label `kmesh.net/bypass=enabled`").Run(func(t framework.TestContext) {
+			for _, s := range src {
+				// Traffic passes through the waypoint indicates that the pods are managed by Kmesh.
+				c := IsL7()
+				opt := echo.CallOptions{
+					To:     dst,
+					Port:   echo.Port{Name: "http"},
+					Scheme: scheme.HTTP,
+					Count:  10,
+					Check:  check.And(check.OK(), c),
+				}
+				s.CallOrFail(t, opt)
+			}
+		})
+
+		for _, s := range src {
+			for _, w := range s.WorkloadsOrFail(t) {
+				if err := setPodLabel(t, apps.Namespace.Name(), w.PodName(), "kmesh.net/bypass", "enabled"); err != nil {
+					t.Fatalf("failed to add bypass label to pod %s/%s: %v", apps.Namespace.Name(), w.PodName(), err)
+				}
+			}
+		}
+
+		t.NewSubTest("after workloads add label `kmesh.net/bypass=enabled`").Run(func(t framework.TestContext) {
+			for _, s := range src {
+				// Bypass will cause the traffic not to pass through the waypoint, so we expect L4 processing.
+				c := IsL4()
+				opt := echo.CallOptions{
+					To:     dst,
+					Port:   echo.Port{Name: "http"},
+					Scheme: scheme.HTTP,
+					Count:  10,
+					Check:  check.And(check.OK(), c),
+				}
+				s.CallOrFail(t, opt)
+			}
+		})
+
+		for _, s := range src {
+			for _, w := range s.WorkloadsOrFail(t) {
+				if err := setPodLabel(t, apps.Namespace.Name(), w.PodName(), "kmesh.net/bypass", "disabled"); err != nil {
+					t.Fatalf("failed to remove bypass label from pod %s/%s: %v", apps.Namespace.Name(), w.PodName(), err)
+				}
+			}
+		}
+
+		t.NewSubTest("after workloads delete label `kmesh.net/bypass=enabled`").Run(func(t framework.TestContext) {
+			for _, s := range src {
+				// After removing the bypass label, traffic should pass through the waypoint again.
+				c := IsL7()
+				opt := echo.CallOptions{
+					To:     dst,
+					Port:   echo.Port{Name: "http"},
+					Scheme: scheme.HTTP,
+					Count:  10,
+					Check:  check.And(check.OK(), c),
+				}
+				s.CallOrFail(t, opt)
+			}
+		})
+	})
+}

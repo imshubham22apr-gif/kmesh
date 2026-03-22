@@ -56,6 +56,10 @@ func ShouldEnroll(pod *corev1.Pod, ns *corev1.Namespace) bool {
 			}
 		}
 
+		if pod.Labels["kmesh.net/bypass"] == "enabled" {
+			return false
+		}
+
 		podMode := pod.Labels[constants.DataPlaneModeLabel]
 		// Check if pod label contains istio.io/dataplane-mode: kmesh
 		if strings.EqualFold(podMode, constants.DataPlaneModeKmesh) {
